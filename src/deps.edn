@@ -1,0 +1,6 @@
+{:paths ["src"]
+ :deps {}  ; No external dependencies!
+ :aliases
+ {:run-examples {:main-opts ["-m" "uxn.actual"]}
+  :run-tests {:main-opts ["-m" "uxn.test"]}
+  :repl {:main-opts ["-m" "clojure.main"]}}}
