@@ -13,6 +13,15 @@
 (def vm-should-run (atom true))
 (def vm-program-counter (atom 0))
 
+(defn debug-value [x]
+  )
+
+(defmacro zero! [x]
+  `(let [v# ~x]
+     (if (instance? clojure.lang.Atom v#)
+       (reset! v# 0)
+       (java.util.Arrays/fill v# (byte 0)))))
+
 (defn u8 [x] (bit-and x 0xff))
 
 (defn helper-imm16 []
@@ -24,26 +33,60 @@
     (swap! vm-program-counter + 2)
     x))
 
-(defn helper-push! [stack ptr x]
-  (aset-byte stack @ptr (byte x))
-  (swap! ptr inc))
+(defn helper-push16! [stack ptr x]
+  (helper-push! stack ptr (u8 (bit-shift-right x 8)))
+  (helper-push! stack ptr (u8 x)))
 
 (defn helper-pop! [stack ptr]
   (swap! ptr dec)
   (u8 (aget stack @ptr)))
 
+;; BRK: Break
+;; Halts the processor
 (defn vm-brk []
   (reset! vm-should-run false))
 
+;; JCI: Jump Conditional Immediate
+;; Checks if the next value in the stack is 0
+;; If yes: nothing; If no: Jumps to that address
 (defn vm-jci []
+  (if-not (= 0 (helper-imm16))
+    (reset! vm-program-counter (helper-imm16))))
+
+;; JMI: Jump Immediate
+;; Jumps to the next address in memory with no
+;; checks whatsoever
+(defn vm-jmi []
   (reset! vm-program-counter (helper-imm16)))
+
+;; JSI: Jump Stash Return Immediate
+;; Jumps to an address and notes the address 
+;; on the return stack
+(defn vm-jsi []
+  (let [target-addr (helper-imm16)
+        return-addr @vm-program-counter]
+    (helper-push16! vm-stack-return vm-stack-return-ptr return-addr)
+    (reset! vm-program-counter target-addr)))
 
 (defn vm-opcode-eval [opcode]
   (cond
     (= opcode 0x00)(vm-brk) ; BRK
     (= opcode 0x20)(vm-jci) ; JCI
+    (= opcode 0x40)(vm-jmi) ; JMI
+    (= opcode 0x60)(vm-jsi) ; JSI
     :else
     (println "Unknown opcode:" opcode)))
+
+;; Reboots/Resets the VM
+(defn vm-reset! []
+  (zero! vm-memory)
+  (zero! vm-devices)
+  (zero! vm-stack-working)
+  (zero! vm-stack-return)
+  (zero! vm-stack-working-ptr)
+  (zero! vm-stack-return-ptr)
+  (zero! vm-should-run)
+  (zero! vm-program-counter))
 
 (defn vm-step []
   (let [pc @vm-program-counter
