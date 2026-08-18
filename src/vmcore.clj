@@ -13,9 +13,7 @@
 (def vm-should-run (atom true))
 (def vm-program-counter (atom 0))
 
-(defn debug-value [x]
-  )
-
+;; Zeros out an array or an atom
 (defmacro zero! [x]
   `(let [v# ~x]
      (if (instance? clojure.lang.Atom v#)
@@ -33,13 +31,25 @@
     (swap! vm-program-counter + 2)
     x))
 
-(defn helper-push16! [stack ptr x]
-  (helper-push! stack ptr (u8 (bit-shift-right x 8)))
-  (helper-push! stack ptr (u8 x)))
+;; Pushes an 8-bit value onto the stack
+(defn helper-push8! [stack ptr x]
+  (aset-byte stack @ptr (u8 x))
+  (swap! ptr inc))
 
-(defn helper-pop! [stack ptr]
+;; Pushes a 16-bit value onto the stack
+(defn helper-push16! [stack ptr x]
+  (helper-push8! stack ptr (u8 (bit-shift-right x 8)))
+  (helper-push8! stack ptr (u8 x)))
+
+;; Pops an 8-bit value from the stack
+(defn helper-pop8! [stack ptr]
   (swap! ptr dec)
   (u8 (aget stack @ptr)))
+
+;; Pops a 16-bit value from the stack
+(defn helper-pop16! [stack ptr]
+  (bit-or (bit-shift-left (helper-pop8! stack ptr) 8)
+          (helper-pop! stack ptr)))
 
 ;; BRK: Break
 ;; Halts the processor
@@ -68,6 +78,15 @@
     (helper-push16! vm-stack-return vm-stack-return-ptr return-addr)
     (reset! vm-program-counter target-addr)))
 
+;; INC: Increment
+;; Increments the items on top of the stack by 1
+(defn vm-inc []
+  (let [ptr @vm-stack-working-ptr
+        curr-val (u8 (aget vm-stack-working ptr))
+        new-val (u8 (inc curr-val))]
+    (aset-byte vm-stack-working ptr new-val)))
+
+;; Reads an opcode and executes the according function
 (defn vm-opcode-eval [opcode]
   (cond
     (= opcode 0x00)(vm-brk) ; BRK
@@ -88,6 +107,8 @@
   (zero! vm-should-run)
   (zero! vm-program-counter))
 
+;; Steps through the memory by incrementing
+;; the PC and gets the next opcode
 (defn vm-step []
   (let [pc @vm-program-counter
         opcode (u8 (aget vm-memory pc))]
